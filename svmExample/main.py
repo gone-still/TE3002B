@@ -1,8 +1,8 @@
 # File        :   main.py (Classifier workflow example)
-# Version     :   1.0.0
+# Version     :   1.0.5
 # Description :   Script that  shows a classic machine learning classifier
 #                 workflow implementing a SVM for shape classification
-# Date:       :   Feb 08, 2022
+# Date:       :   Feb 17, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -15,9 +15,9 @@ import random
 # import helper functions:
 import imageUtils
 
+
 # Compute shape attributes:
 def computeAttributes(sampleList, attributtes):
-
     # Get list dimensions:
     numberOfSamples = len(sampleList)
 
@@ -48,39 +48,56 @@ def computeAttributes(sampleList, attributtes):
 
         # Get contours:
         contours, _ = cv2.findContours(binaryImage, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        binaryCopy = binaryImage.copy()
+        binaryCopy = cv2.cvtColor(binaryCopy, cv2.COLOR_GRAY2BGR)
 
         # print("Contours: " + str(len(contours)))
 
         # Check out the contours, compute attributes:
         for _, c in enumerate(contours):
-
             # Get the shape's boundig box:
             x, y, w, h = cv2.boundingRect(c)
 
+            # Blob area:
+            blobArea = cv2.contourArea(c)
+
             # Aspect Ratio:
-            aspectRatio = h / w
+            aspectRatio = w / h
 
             # Circularity:
-            area = cv2.contourArea(c)
             perimeter = cv2.arcLength(c, True)
-            circularity = pow(perimeter, 2) / (4 * 3.1416 * area)
+            circularity = pow(perimeter, 2) / (4 * np.pi * blobArea)
 
-            # Rotated Rect area:
-            rect = cv2.minAreaRect(c)
-            cx, cy = rect[0]
-            w, h = rect[1]
-            theta = rect[2]
+            # Solidity:
+            hull = cv2.convexHull(c)
+            hullArea = cv2.contourArea(hull)
+            solidity = blobArea / hullArea
 
-            # Area Difference -> rotatedArea - area:
-            rotatedRectArea = w * h
-            areaDifference = rotatedRectArea - area
+            # Area Difference -> boundingRectArea - blobArea:
+            boundingRectArea = w * h
+            areaDifference = boundingRectArea - blobArea
 
-            print(currentClass + "A: " + str(aspectRatio) + " C: " + str(circularity) + " D: " + str(areaDifference))
+            # Extent:
+            # extent = blobArea / boundingRectArea
+
+            print(currentClass + " A: " + str(aspectRatio) + " D: " + str(areaDifference) + " S: " + str(solidity))
+
+            # blobAreaDif = cv2.countNonZero(binaryImage)
+            # print((blobArea, blobAreaDif))
+
+            # binaryCopy = cv2.drawContours(binaryCopy, [c], 0, (0, 255, 0), 3)
+            # cv2.rectangle(binaryCopy, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 255), 1)
+            # cv2.imshow("Contours", binaryCopy)
+            # cv2.waitKey(0)
 
             # Take those 3 attributes and shove them up into the array:
             outArray[i][1] = aspectRatio
-            outArray[i][2] = circularity
+            #outArray[i][2] = solidity
             outArray[i][3] = areaDifference
+            outArray[i][2] = circularity
+
+            # moments = cv2.moments(im)
+            # huMoments = cv2.HuMoments(moments)
 
     return outArray
 
@@ -155,8 +172,8 @@ SVM = cv2.ml.SVM_create()
 
 # Set hyperparameters:
 SVM.setKernel(cv2.ml.SVM_LINEAR)  # Sets the SVM kernel, this is a linear kernel
-SVM.setType(cv2.ml.SVM_NU_SVC)    # Sets the SVM type, this is a "Smooth" Classifier
-SVM.setNu(0.09)                   # Sets the "smoothness" of the decision boundary, values: [0.0 - 1.0]
+SVM.setType(cv2.ml.SVM_NU_SVC)  # Sets the SVM type, this is a "Smooth" Classifier
+SVM.setNu(0.1)  # Sets the "smoothness" of the decision boundary, values: [0.0 - 1.0]
 
 SVM.setTermCriteria((cv2.TERM_CRITERIA_COUNT, 25, 1.e-01))
 SVM.train(trainData, cv2.ml.ROW_SAMPLE, trainLabels)
@@ -174,7 +191,6 @@ print("SVM Accuracy: " + str(correct * 100.0 / svmResult.size) + " %")
 testImages = testLabels.shape[:1][0]
 
 for s in range(testImages):
-
     # Get the current test image:
     currentImage = testList[s][2]
     # Get the SVM class for this test image:
