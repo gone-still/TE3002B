@@ -1,5 +1,5 @@
 # File        :   main.py (Classifier workflow example)
-# Version     :   1.0.5
+# Version     :   1.0.6
 # Description :   Script that  shows a classic machine learning classifier
 #                 workflow implementing a SVM for shape classification
 # Date:       :   Feb 17, 2022
@@ -66,7 +66,7 @@ def computeAttributes(sampleList, attributtes):
 
             # Circularity:
             perimeter = cv2.arcLength(c, True)
-            circularity = pow(perimeter, 2) / (4 * np.pi * blobArea)
+            circularity = (4 * np.pi * blobArea) / pow(perimeter, 2)
 
             # Solidity:
             hull = cv2.convexHull(c)
@@ -80,7 +80,7 @@ def computeAttributes(sampleList, attributtes):
             # Extent:
             # extent = blobArea / boundingRectArea
 
-            print(currentClass + " A: " + str(aspectRatio) + " D: " + str(areaDifference) + " S: " + str(solidity))
+            print(currentClass + " A: " + str(aspectRatio) + " D: " + str(areaDifference) + " C: " + str(circularity))
 
             # blobAreaDif = cv2.countNonZero(binaryImage)
             # print((blobArea, blobAreaDif))
@@ -92,7 +92,7 @@ def computeAttributes(sampleList, attributtes):
 
             # Take those 3 attributes and shove them up into the array:
             outArray[i][1] = aspectRatio
-            #outArray[i][2] = solidity
+            # outArray[i][2] = solidity
             outArray[i][3] = areaDifference
             outArray[i][2] = circularity
 
