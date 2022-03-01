@@ -1,7 +1,10 @@
 # pokenet
 **CNN** that classifies 5 different pokemons from an image. The classes are _"bulbasaur", "charmander", "mewtwo", "pikachu"_ and _"squirtle"_. My version of https://github.com/grenlavus/smallvggnet. The data set is pretty small: ≈ _280 samples per class_. I use data augmentation to enhance the dataset. I have included some **Bath Normalization** and **Drop out** layers to combat overfitting. This version implements an _Early Stop callback_ if testing loss is below or equal to a threshold (th=0.19) during training. These are some results to test the net's generalization:
 
-|        Input Image        |Number Recognition             |Output Matrix|
-|---------------------------|-------------------------------|------------------|
-|![sudoku01](https://user-images.githubusercontent.com/8327505/150041359-75bd20e6-3df4-469b-8ce0-d220e8bb6e30.png)|![sudoku02](https://user-images.githubusercontent.com/8327505/150041398-54cfdeea-dd14-4cc8-aba1-162b25511e10.png) |![sudokuMat](https://user-images.githubusercontent.com/8327505/150041406-ef4834b8-f396-4b62-85da-24c0848ee174.png) |
+|        Classified Image        |
+|--------------------------------|
+|![classified-0](https://user-images.githubusercontent.com/8327505/156254795-e153855d-e46c-4a29-a799-dfa04205949d.png) ![classified-1](https://user-images.githubusercontent.com/8327505/156254802-21fa4df9-aec4-421c-b972-ab934c05cde9.png) ![classified-2](https://user-images.githubusercontent.com/8327505/156254848-9ebfe372-3536-4e26-85d9-e53ed1b714bb.png)|
+|![classified-3](https://user-images.githubusercontent.com/8327505/156254873-b65e31c3-1cf1-4a05-be21-f3b97be2ceb6.png) ![classified-4](https://user-images.githubusercontent.com/8327505/156254891-192c4cbd-1a3f-40f3-8ea4-40db8643b1e2.png) ![classified-17](https://user-images.githubusercontent.com/8327505/156255325-642e7c3c-2f7d-4774-a5ea-44bf109fbe30.png)|
+
+
 
