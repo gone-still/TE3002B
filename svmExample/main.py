@@ -1,8 +1,8 @@
 # File        :   main.py (Classifier workflow example)
-# Version     :   1.0.6
+# Version     :   1.0.7
 # Description :   Script that  shows a classic machine learning classifier
 #                 workflow implementing a SVM for shape classification
-# Date:       :   Feb 17, 2022
+# Date:       :   Apr 24, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -17,15 +17,15 @@ import imageUtils
 
 
 # Compute shape attributes:
-def computeAttributes(sampleList, attributtes):
+def computeAttributes(sampleList, features):
     # Get list dimensions:
     numberOfSamples = len(sampleList)
 
     # Prepare the out array:
-    outArray = np.zeros((numberOfSamples, attributtes + 1), dtype=np.float32)
+    outArray = np.zeros((numberOfSamples, features + 1), dtype=np.float32)
 
     # Attribute computation:
-    for i in range(len(sampleList)):
+    for i in range(numberOfSamples):
         # Get tuple from list:
         currentTuple = sampleList[i]
         # Get class (string):
@@ -64,35 +64,19 @@ def computeAttributes(sampleList, attributtes):
             # Aspect Ratio:
             aspectRatio = w / h
 
-            # Circularity:
-            perimeter = cv2.arcLength(c, True)
-            circularity = (4 * np.pi * blobArea) / pow(perimeter, 2)
-
-            # Solidity:
-            hull = cv2.convexHull(c)
-            hullArea = cv2.contourArea(hull)
-            solidity = blobArea / hullArea
-
             # Area Difference -> boundingRectArea - blobArea:
             boundingRectArea = w * h
             areaDifference = boundingRectArea - blobArea
 
-            # Extent:
-            # extent = blobArea / boundingRectArea
+            # Circularity:
+            perimeter = cv2.arcLength(c, True)
+            circularity = (4 * np.pi * blobArea) / pow(perimeter, 2)
 
+            # Print the info:
             print(currentClass + " A: " + str(aspectRatio) + " D: " + str(areaDifference) + " C: " + str(circularity))
-
-            # blobAreaDif = cv2.countNonZero(binaryImage)
-            # print((blobArea, blobAreaDif))
-
-            # binaryCopy = cv2.drawContours(binaryCopy, [c], 0, (0, 255, 0), 3)
-            # cv2.rectangle(binaryCopy, (int(x), int(y)), (int(x + w), int(y + h)), (0, 0, 255), 1)
-            # cv2.imshow("Contours", binaryCopy)
-            # cv2.waitKey(0)
 
             # Take those 3 attributes and shove them up into the array:
             outArray[i][1] = aspectRatio
-            # outArray[i][2] = solidity
             outArray[i][3] = areaDifference
             outArray[i][2] = circularity
 
@@ -120,11 +104,14 @@ classesDictionary = {0: "circle", 1: "square", 2: "rectangle"}
 trainSamples = 50
 testSamples = 20
 
+# Get the total shape classes:
+totalShapeClasses = len(shapeClasses)
 # Create the train data set:
-for c in range(len(shapeClasses)):
+for c in range(totalShapeClasses):
     # Get class as string:
     currentClass = shapeClasses[c]
     # Get class as number 0-2:
+    # Implements a "reverse dictionary":
     classNumber = list(classesDictionary.keys())[list(classesDictionary.values()).index(currentClass)]
     for s in range(trainSamples):
         # Create image
@@ -148,15 +135,15 @@ for c in range(testSamples):
     # imageUtils.showImage("Current Shape", outImage)
 
 # Create the train/test matrices:
-trainMatrix = computeAttributes(trainList, attributtes=3)
-testMatrix = computeAttributes(testList, attributtes=3)
+trainMatrix = computeAttributes(trainList, features=3)
+testMatrix = computeAttributes(testList, features=3)
 
 # Get train data and labels:
 (trSamples, attributes) = trainMatrix.shape
 
-# Get train labels:
+# Get train labels (first column):
 trainLabels = trainMatrix[0:trSamples, 0:1].astype(np.int32)
-# Get train data:
+# Get train data (second to last column):
 trainData = trainMatrix[0:trSamples, 1:attributes].astype(np.float32)
 
 # Get test data and labels:
@@ -182,7 +169,9 @@ SVM.train(trainData, cv2.ml.ROW_SAMPLE, trainLabels)
 # Begin Prediction:
 svmResult = SVM.predict(testData)[1]
 
-# Show accuracy:
+# Show accuracy
+# Create a mask that shows where SVM's preditcion matches
+# the sample label:
 mask = svmResult == testLabels
 correct = np.count_nonzero(mask)
 print("SVM Accuracy: " + str(correct * 100.0 / svmResult.size) + " %")
