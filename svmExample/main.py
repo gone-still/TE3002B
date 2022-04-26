@@ -1,201 +1,288 @@
-# File        :   main.py (Classifier workflow example)
-# Version     :   1.0.7
-# Description :   Script that  shows a classic machine learning classifier
-#                 workflow implementing a SVM for shape classification
-# Date:       :   Apr 24, 2022
-# Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
-# License     :   MIT
-
-
-# Imports:
 import numpy as np
-import cv2
-import random
+import cv2 as cv
+import os
 
-# import helper functions:
-import imageUtils
+# Defines a re-sizable image window:
+def showImage(imageName, inputImage):
+    cv.namedWindow(imageName, cv.WINDOW_NORMAL)
+    cv.imshow(imageName, inputImage)
+    cv.waitKey(0)
 
+def writeImage(imagePath, inputImage):
+    imagePath = imagePath + ".png"
+    cv.imwrite(imagePath, inputImage, [cv.IMWRITE_PNG_COMPRESSION, 0])
+    print("Wrote Image: " + imagePath)
 
-# Compute shape attributes:
-def computeAttributes(sampleList, features):
-    # Get list dimensions:
-    numberOfSamples = len(sampleList)
+# image path
+path ="D://opencvImages//symbols//samples//"
 
-    # Prepare the out array:
-    outArray = np.zeros((numberOfSamples, features + 1), dtype=np.float32)
+# nearest neighbors
+maxNeighbors = 1
 
-    # Attribute computation:
-    for i in range(numberOfSamples):
-        # Get tuple from list:
-        currentTuple = sampleList[i]
-        # Get class (string):
-        currentClass = currentTuple[0]
-        # Get class (number):
-        currentClassNumber = currentTuple[1]
-        # Get current image:
-        currentImage = currentTuple[2]
+showImages = False
+writeResults = True
+outPath = "D://opencvImages//classifiers//"
 
-        # Set class:
-        outArray[i][0] = currentClassNumber
+# writeMode: [a]ppend, [w]rite
+writeMode = "w"
 
-        # To Gray:
-        grayImage = cv2.cvtColor(currentImage, cv2.COLOR_BGR2GRAY)
-        # imageUtils.showImage("Gray", grayImage)
+# Open file for writing:
+if writeResults:
+    outputFile = open(outPath + "classifierResults.txt", writeMode)
+    outputFile.write("i, truth, knn, svm\n")
 
-        # Threshold:
-        _, binaryImage = cv2.threshold(grayImage, 0, 255, cv2.THRESH_OTSU)
-        # imageUtils.showImage("Binary", binaryImage)
+cellWidth = 210
+cellHeight = 165
 
-        # Get contours:
-        contours, _ = cv2.findContours(binaryImage, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        binaryCopy = binaryImage.copy()
-        binaryCopy = cv2.cvtColor(binaryCopy, cv2.COLOR_GRAY2BGR)
+imageCounter = 0
+scale = 1
 
-        # print("Contours: " + str(len(contours)))
+verbose = False
 
-        # Check out the contours, compute attributes:
-        for _, c in enumerate(contours):
-            # Get the shape's boundig box:
-            x, y, w, h = cv2.boundingRect(c)
+# the data is stored here:
+totalClasses = 14
+totalTest = 4
 
-            # Blob area:
-            blobArea = cv2.contourArea(c)
+totalSamples = 18
 
-            # Aspect Ratio:
-            aspectRatio = w / h
+sampleMatrix = np.empty((totalClasses, totalSamples, cellHeight, cellWidth), dtype=np.uint8)
 
-            # Area Difference -> boundingRectArea - blobArea:
-            boundingRectArea = w * h
-            areaDifference = boundingRectArea - blobArea
+# the class dictionary:
+classDictionary = {}
+classDictionary[0] = "arrUp"
+classDictionary[1] = "faceSmile"
+classDictionary[2] = "arrDwn"
+classDictionary[3] = "arrZ"
+classDictionary[4] = "arrShck"
 
-            # Circularity:
-            perimeter = cv2.arcLength(c, True)
-            circularity = (4 * np.pi * blobArea) / pow(perimeter, 2)
-
-            # Print the info:
-            print(currentClass + " A: " + str(aspectRatio) + " D: " + str(areaDifference) + " C: " + str(circularity))
-
-            # Take those 3 attributes and shove them up into the array:
-            outArray[i][1] = aspectRatio
-            outArray[i][3] = areaDifference
-            outArray[i][2] = circularity
-
-            # moments = cv2.moments(im)
-            # huMoments = cv2.HuMoments(moments)
-
-    return outArray
+classDictionary[5] = "arrDouble"
+classDictionary[6] = "charH"
+classDictionary[7] = "charE"
+classDictionary[8] = "charL"
+classDictionary[9] = "charO"
 
 
-# Set image path
-path = "D://opencvImages//"
+classCounter = 0
+sampleCounter = 0
 
-# Create the test/train lists:
-trainList = []
-testList = []
+# Iterate over the names of each class
+directoryList = os.listdir(path)
+for currentDirectory in os.listdir(path):
 
-# Roll the PRNG:
-random.seed(42)
+    # Get the directory on the current path:
+    currentPath = os.path.join(path, currentDirectory)
 
-# Create the class list and dictionary:
-shapeClasses = ["circle", "square", "rectangle"]
-classesDictionary = {0: "circle", 1: "square", 2: "rectangle"}
+    sampleCounter = 0
 
-# Set the number of train/test samples:
-trainSamples = 50
-testSamples = 20
+    # Get the images on the current path:
+    for currentImage in os.listdir(currentPath):
 
-# Get the total shape classes:
-totalShapeClasses = len(shapeClasses)
-# Create the train data set:
-for c in range(totalShapeClasses):
-    # Get class as string:
-    currentClass = shapeClasses[c]
-    # Get class as number 0-2:
-    # Implements a "reverse dictionary":
-    classNumber = list(classesDictionary.keys())[list(classesDictionary.values()).index(currentClass)]
-    for s in range(trainSamples):
-        # Create image
-        outImage = imageUtils.createShape(currentClass, (200, 320))
-        # Into the list:
-        trainList.append((currentClass, classNumber, outImage))
-        # imageUtils.showImage("Class: "+currentClass+", Sample: "+str(s), outImage)
+        # create path and read image:
+        imagePath = os.path.join(currentPath, currentImage)
 
-# Create the test data set:
-for c in range(testSamples):
-    # Get random class as number:
-    randomClass = random.randint(0, len(shapeClasses) - 1)
-    # Get class as string:
-    currentClass = classesDictionary[randomClass]
+        inputImage = cv.imread(imagePath)
+        imageCopy = inputImage.copy()
 
-    # Create image
-    outImage = imageUtils.createShape(currentClass, (200, 320))
-    # Into the list:
-    testList.append((currentClass, randomClass, outImage))
-    print(currentClass)
-    # imageUtils.showImage("Current Shape", outImage)
+        if verbose:
+            showImage("Image: " + str(imageCounter), inputImage)
 
-# Create the train/test matrices:
-trainMatrix = computeAttributes(trainList, features=3)
-testMatrix = computeAttributes(testList, features=3)
+        grayImage = cv.cvtColor(inputImage, cv.COLOR_BGR2GRAY)
 
-# Get train data and labels:
-(trSamples, attributes) = trainMatrix.shape
+        # get dimensions:
+        originalHeight, originalWidth = grayImage.shape[:2]
 
-# Get train labels (first column):
-trainLabels = trainMatrix[0:trSamples, 0:1].astype(np.int32)
-# Get train data (second to last column):
-trainData = trainMatrix[0:trSamples, 1:attributes].astype(np.float32)
+        invertedImage = 255 - grayImage
+        imageArea = cv.countNonZero(invertedImage)
 
-# Get test data and labels:
-(tsSamples, attributes) = testMatrix.shape
+        # if verbose:
+        #     print("Original Area: " + str(imageArea))
 
-# Get test labels:
-testLabels = testMatrix[0:trSamples, 0:1].astype(np.int32)
-# Get test data:
-testData = testMatrix[0:trSamples, 1:attributes].astype(np.float32)
+        minArea = 0.05 * imageArea
 
-# Create the SVM:
-SVM = cv2.ml.SVM_create()
+        # if verbose:
+        #    print("minArea: " + str(minArea))
 
-# Set hyperparameters:
-SVM.setKernel(cv2.ml.SVM_LINEAR)  # Sets the SVM kernel, this is a linear kernel
-SVM.setType(cv2.ml.SVM_NU_SVC)  # Sets the SVM type, this is a "Smooth" Classifier
-SVM.setNu(0.1)  # Sets the "smoothness" of the decision boundary, values: [0.0 - 1.0]
+        # Find the big contours/blobs on the filtered image:
+        contours, hierarchy = cv.findContours(invertedImage, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE)
 
-SVM.setTermCriteria((cv2.TERM_CRITERIA_COUNT, 25, 1.e-01))
-SVM.train(trainData, cv2.ml.ROW_SAMPLE, trainLabels)
+        maxX = 0
+        minX = originalWidth
+        minY = originalHeight
+        maxY = 0
 
-# Test:
-# Begin Prediction:
-svmResult = SVM.predict(testData)[1]
+        # Look for the outer bounding boxes:
+        for b, c in enumerate(contours):
 
-# Show accuracy
-# Create a mask that shows where SVM's preditcion matches
-# the sample label:
-mask = svmResult == testLabels
+            currentArea = cv.contourArea(c)
+
+            if hierarchy[0][b][3] == -1 and currentArea > minArea:
+
+                x, y, w, h = cv.boundingRect(c)
+
+                #cv.rectangle(imageCopy,(x,y),(x+w,y+h),(0,255,0),1)
+                #showImage("Rects", imageCopy)
+
+                contourMaximumX = x + w
+                if contourMaximumX > maxX:
+                    maxX = contourMaximumX
+                if x < minX:
+                    minX = x
+                contourMaximumY = y + h
+                if contourMaximumY > maxY:
+                    maxY = contourMaximumY
+                if y < minY:
+                    minY = y
+
+        compoX = minX
+        compoY = minY
+        compoWidth = maxX - minX
+        compoHeight = maxY - minY
+
+        #cv.rectangle(imageCopy, (compoX, compoY), (compoX + compoWidth, compoY + compoHeight), (255, 0, 0), 1)
+        #showImage("Rects", imageCopy)
+
+        # Crop the ROI:
+        # filteredImage[y:y + h, x:x + w]
+        croppedImg = grayImage[compoY:compoY + compoHeight, compoX:compoX + compoWidth]
+        if verbose:
+            showImage("cropped img", croppedImg)
+            # writeImage("D://opencvImages//sigSamples//data//croppedSig.png", croppedImg)
+
+        # create canvas:
+        newImage = np.zeros((cellHeight, cellWidth), np.uint8)
+        newImage = 255 - newImage
+        croppedHeight, croppedWidth = croppedImg.shape[:2]
+
+        # top-left point from which to insert the smallest image. height first, from the top of the window
+        offset = np.array((compoY, compoX))
+        newImage[offset[0]:offset[0] + croppedHeight, offset[1]:offset[1] + croppedWidth] = croppedImg
+
+        # Resize?
+        if scale != 1:
+            width = int(newImage.shape[1] * scale)
+            height = int(newImage.shape[0] * scale)
+
+            # dsize
+            dsize = (width, height)
+
+            # resize image
+            newImage = cv.resize(newImage, dsize, interpolation=cv.INTER_AREA)
+
+        if verbose:
+            showImage("newImage", newImage)
+            # writeImage(path + "newImage", newImage)
+
+        # Store in array:
+        sampleMatrix[classCounter, sampleCounter] = newImage
+        # shit = sampleMatrix[0, 0]
+        # showImage("shit", shit)
+        sampleCounter = sampleCounter + 1
+        print("Class: "+str(classCounter)+" Sample: "+str(sampleCounter))
+
+    classCounter = classCounter + 1
+
+# Reshape data to a plain matrix:
+train = sampleMatrix[:totalClasses-totalTest, :].reshape(-1, cellWidth*cellHeight).astype(np.float32)
+# train = sampleMatrix.reshape(-1, cellWidth*cellHeight).astype(np.float32)
+testImages = sampleMatrix[totalClasses-totalTest:, :]
+test = testImages.reshape(-1, cellWidth*cellHeight).astype(np.float32)
+
+# Create labels for train and test data
+k = np.arange(totalClasses-totalTest)
+train_labels = np.repeat(k, totalSamples)[:, np.newaxis]
+# test_labels = train_labels.copy()
+test_labels = np.array([[0], [1], [3], [2], [9], [9], [7], [7], [8], [8], [0], [2], [2], [3], [3], [4], [4], [1],
+                        [1], [5], [8], [8], [1], [2], [2], [2], [5], [5], [1], [6], [6], [7], [7], [5], [9], [9],
+                        [1], [0], [0], [0], [2], [3], [3], [4], [4], [5], [1], [1], [6], [6], [6], [5], [4], [3],
+                        [5], [4], [0], [6], [8], [5], [0], [2], [1], [7], [8], [9], [1], [2], [3], [8], [0], [1],
+                        ])
+
+(testFolders, testSamples) = testImages.shape[:2]
+
+for f in range(testFolders):
+    for m in range(testSamples):
+        testes = testImages[f][m]
+
+        dictionaryValue = test_labels[totalSamples*f + m][0]
+
+        currentClass = classDictionary[dictionaryValue]
+        if verbose:
+            print("Smaple: "+str(f)+"-"+str(m)+", class: "+currentClass)
+            showImage("teste", testes)
+
+    # print("Dim: "+str(train.shape))
+
+
+print("Running Knn...")
+
+# Initiate kNN, train it on the training data, then test it with the test data with k=5
+knn = cv.ml.KNearest_create()
+knn.train(train, cv.ml.ROW_SAMPLE, train_labels)
+ret, knnResult, neighbours, dist = knn.findNearest(test, maxNeighbors)
+
+# if writeResults:
+#    outputFile.write("Knn results, k = " + str(maxNeighbors) + "\n")
+
+# Now we check the accuracy of classification
+# For that, compare the result with test_labels and check which are wrong
+matches = knnResult == test_labels
+correct = np.count_nonzero(matches)
+accuracy = correct * 100.0 / knnResult.size
+print("Knn Acc: "+str(accuracy))
+
+print("Running SVM...")
+
+SVM = cv.ml.SVM_create()
+SVM.setKernel(cv.ml.SVM_LINEAR)
+SVM.setType(cv.ml.SVM_C_SVC)
+SVM.setC(2.0)
+SVM.setGamma(5.5)
+# SVM.setC(2.67)
+# SVM.setGamma(5.383)
+
+SVM.setTermCriteria((cv.TERM_CRITERIA_COUNT, 100, 1.e-06))
+SVM.train(train, cv.ml.ROW_SAMPLE, train_labels)
+
+svmResult = SVM.predict(test)[1]
+
+mask = svmResult == test_labels
 correct = np.count_nonzero(mask)
-print("SVM Accuracy: " + str(correct * 100.0 / svmResult.size) + " %")
+print("SVM Acc: "+str(correct*100.0/svmResult.size))
 
-# Show each test sample and its classification result:
-testImages = testLabels.shape[:1][0]
+(h, w) = testImages.shape[:2]
+labelIndex = 0
 
-for s in range(testImages):
-    # Get the current test image:
-    currentImage = testList[s][2]
-    # Get the SVM class for this test image:
-    svmPrediction = svmResult[s][0]
-    # Get class string based on class number:
-    svmLabel = classesDictionary[svmPrediction]
+for y in range(h):
+    currentArray = testImages[y]
+    (h, w) = currentArray.shape[:2]
+    for x in range(h):
+        currentImage = currentArray[x]
 
-    # Get real class number:
-    realClass = testLabels[s][0]
-    # Ger real string based on class number:
-    realLabel = classesDictionary[realClass]
+        knnPrediction = knnResult[labelIndex][0]
+        knnLabel = classDictionary[knnPrediction]
 
-    # Draw labels on image:
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(currentImage, "SVM: " + str(svmLabel), (3, 15), font, 0.5, (0, 255, 0), 1, cv2.LINE_8)
-    cv2.putText(currentImage, "TRUTH: " + str(realLabel), (3, 30), font, 0.5, (255, 255, 255), 1, cv2.LINE_8)
+        svmPrediction = svmResult[labelIndex][0]
+        svmLabel = classDictionary[svmPrediction]
 
-    # Show the classified image:
-    imageUtils.showImage("Test Image", currentImage)
+        dictionaryValue = test_labels[labelIndex][0]
+        currentLabel = classDictionary[dictionaryValue]
+
+        writeString = str(labelIndex) + ", " + str(dictionaryValue) + ", " + \
+                      str(knnPrediction) + ", " + str(svmPrediction) + ", " + \
+                      "(" + currentLabel + ")" + ", [" + knnLabel + "]" + ", [" + svmLabel + "]"
+
+        labelIndex = labelIndex + 1
+
+        print(writeString)
+        if True:
+            showImage("Test Image", currentImage)
+
+        if writeResults:
+            outputFile.write(writeString + "\n")
+
+# Close writing file:
+if writeResults:
+    outputFile.close()
+
+outString = "HELLO :D"
+print(outString)
