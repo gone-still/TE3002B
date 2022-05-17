@@ -1,8 +1,8 @@
 # File        :   main.py (Classifier workflow example)
-# Version     :   1.0.7
+# Version     :   1.1.0
 # Description :   Script that  shows a classic machine learning classifier
 #                 workflow implementing a SVM for shape classification
-# Date:       :   Apr 24, 2022
+# Date:       :   May 17, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -11,6 +11,7 @@
 import numpy as np
 import cv2
 import random
+import os
 
 # import helper functions:
 import imageUtils
@@ -88,6 +89,7 @@ def computeAttributes(sampleList, features):
 
 # Set image path
 path = "D://opencvImages//"
+outPath = path + "output//"
 
 # Create the test/train lists:
 trainList = []
@@ -101,8 +103,12 @@ shapeClasses = ["circle", "square", "rectangle"]
 classesDictionary = {0: "circle", 1: "square", 2: "rectangle"}
 
 # Set the number of train/test samples:
-trainSamples = 50
-testSamples = 20
+trainSamples = 2
+testSamples = 2
+
+# Model flags:
+loadModel = True
+saveModel = False
 
 # Get the total shape classes:
 totalShapeClasses = len(shapeClasses)
@@ -154,23 +160,41 @@ testLabels = testMatrix[0:trSamples, 0:1].astype(np.int32)
 # Get test data:
 testData = testMatrix[0:trSamples, 1:attributes].astype(np.float32)
 
-# Create the SVM:
-SVM = cv2.ml.SVM_create()
+# Check if the SVM model should be loaded via an XML file
+# or we must create the SVM model from scratch:
+if not loadModel:
 
-# Set hyperparameters:
-SVM.setKernel(cv2.ml.SVM_LINEAR)  # Sets the SVM kernel, this is a linear kernel
-SVM.setType(cv2.ml.SVM_NU_SVC)  # Sets the SVM type, this is a "Smooth" Classifier
-SVM.setNu(0.1)  # Sets the "smoothness" of the decision boundary, values: [0.0 - 1.0]
+    print("Creating SVM from scratch...")
 
-SVM.setTermCriteria((cv2.TERM_CRITERIA_COUNT, 25, 1.e-01))
-SVM.train(trainData, cv2.ml.ROW_SAMPLE, trainLabels)
+    # Create the SVM:
+    SVM = cv2.ml.SVM_create()
+
+    # Set hyperparameters:
+    SVM.setKernel(cv2.ml.SVM_LINEAR)  # Sets the SVM kernel, this is a linear kernel
+    SVM.setType(cv2.ml.SVM_NU_SVC)  # Sets the SVM type, this is a "Smooth" Classifier
+    SVM.setNu(0.1)  # Sets the "smoothness" of the decision boundary, values: [0.0 - 1.0]
+
+    SVM.setTermCriteria((cv2.TERM_CRITERIA_COUNT, 25, 1.e-01))
+    SVM.train(trainData, cv2.ml.ROW_SAMPLE, trainLabels)
+
+    if saveModel:
+        print("Saving SVM XML...")
+        modelPath = os.path.join(outPath, "svmModel.xml")
+        SVM.save(modelPath)
+        print("Saved SVM XML to: " + modelPath)
+
+else:
+    print("Loading SVM XML...")
+    modelPath = os.path.join(outPath, "svmModel.xml")
+    SVM = cv2.ml.SVM_load(modelPath)
+    print("Loaded SVM XML from: " + modelPath)
 
 # Test:
 # Begin Prediction:
 svmResult = SVM.predict(testData)[1]
 
 # Show accuracy
-# Create a mask that shows where SVM's preditcion matches
+# Create a mask that shows where SVM's prediction matches
 # the sample label:
 mask = svmResult == testLabels
 correct = np.count_nonzero(mask)
