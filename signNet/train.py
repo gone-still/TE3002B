@@ -88,12 +88,12 @@ dataSetPath = os.path.join(mainPath, "dataset")
 outputPath = os.path.join(mainPath, "output")
 
 # Training hyper parameters:
-epochs = 95
-alpha = 0.8899 # 0.5  # Learning rate factor
+epochs = 100
+alpha = 0.85 # 0.5  # Learning rate factor
 learningRate = alpha * 0.0001  # 2e-3, (0.001, 32)
 batchSize = 32  # Could be: 16, 32, 64 In general, the smaller the better
 imageDimensions = (64, 64, 3)  # The image is resized to these dimensions
-stopThreshold = (0.15, 3)  # Thresh and count
+stopThreshold = (0.025, 3)  # Thresh and count
 
 # Callback epoch counter:
 epochCounter = 0
@@ -235,8 +235,8 @@ H = model.fit(
     # steps_per_epoch=trainX.shape[0] // batchSize,
     epochs=epochs,
     class_weight=classWeight,
-    verbose=1 #,
-    # callbacks=[callback]
+    verbose=1,
+    callbacks=[callback]
     )
 
 # Save the model to disk:
