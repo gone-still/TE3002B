@@ -1,9 +1,15 @@
+# File        :   cascadeTest.py (Haar Cascade Test)
+# Version     :   0.9.0
+# Description :   Script that tests classification + tracking of
+#             :   traffic signal
+# Date:       :   May 26, 2022
+# Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
+# License     :   MIT
+
 import cv2
 import numpy as np
 from fastKLT import FastKLT
 from tensorflow.keras.models import load_model
-from skimage import transform
-from skimage import exposure
 
 
 # Shows an image
@@ -26,14 +32,19 @@ def writeImage(imagePath, inputImage):
 filePath = "D://trackerTest//"
 outPath = filePath + "out//"
 modelsPath = filePath + "models//"
-# caffeConfigFile = filePath + "deploy.prototxt"
-# caffeWeightsFile = filePath + "res10_300x300_ssd_iter_140000_fp16.caffemodel"
+
+# CNN size:
+imageSize = (64, 64)
+
+# Class dictionary:
+classDictionary = {0: "Stop", 1: "Ahead Only", 2: "Roundabout", 3: "Turn Right", 4: "End Speed", 5: "No Entry"}
 
 # Speed of the video:
 videoSpeed = 1
 frameWidth = 1280
 frameHeight = 720
 
+# Frame aspect ratio:
 aspectRatio = frameWidth / frameHeight
 
 # Frame Counter:
@@ -108,9 +119,7 @@ tracker.setVerbose(False)
 tracker.showGrid(False)
 
 # Load the CNN model:
-model = load_model(modelsPath + "trafficsignnet.model")
-labelnames = open(modelsPath + "signnames.csv").read().strip().split("\n")[1:]
-labelnames = [l.split(",")[1] for l in labelnames]
+model = load_model(modelsPath + "signnet.model")
 classString = ""
 
 # Set the video device:
@@ -147,8 +156,6 @@ while videoDevice.isOpened():
         cv2.line(roiCopy, (rightSide, 0), (rightSide, roiY + resizedHeight), (255, 0, 0), 1)
         showImage("roiCopy", roiCopy)
 
-        # writeImage(outPath + "Resized Frame", detectionRoi)
-
         # Crop to detection dimensions:
         detectionRoi = detectionRoi[cascadeRoi[1]:cascadeRoi[1] + cascadeRoi[3],
                        cascadeRoi[0]:cascadeRoi[0] + cascadeRoi[2]]
@@ -156,9 +163,6 @@ while videoDevice.isOpened():
         # Grayscale Conversion:
         detectionRoiColor = detectionRoi.copy()
         detectionRoi = cv2.cvtColor(detectionRoi, cv2.COLOR_BGR2GRAY)
-        # Multiply by the detection mask:
-        # detectionRoi = cv2.bitwise_and(detectionRoi, detectionMask)
-
         showImage("detectionRoi", detectionRoi)
 
         if runCascade:
@@ -205,10 +209,12 @@ while videoDevice.isOpened():
                         color = (0, 0, 255)
                         print("Got invalid Haar Cascade Box")
 
+                    # Draw the bounding box:
                     cv2.rectangle(detectionRoi, (x, y), (x + w, y + h), color, 2)
                     showImage("Haar Boxes", detectionRoi)
 
                     if validPixel == 255:
+
                         # Crop via cascade:
                         targetCrop = detectionRoiColor[y:y + h, x:x + w]
                         showImage("targetCrop [Cascade]", targetCrop)
@@ -275,29 +281,35 @@ while videoDevice.isOpened():
                         # Refine crop area:
                         targetCrop = targetCrop[yGrabCut:yGrabCut + hGrabCut, xGrabCut:xGrabCut + wGrabCut]
                         showImage("targetCrop [Refined]", targetCrop)
-                        # writeImage(outPath + "targetCropRefined", targetCrop)
+                        writeImage(outPath + "targetCropRefined", targetCrop)
 
                         print("Sending crop to CNN...")
                         showImage("targetCrop [Pre-process]", targetCrop)
 
-                        # writeImage(outPath + "croppedFrame-" + str(frameCounter), targetCrop)
-
-                        targetCrop = transform.resize(targetCrop, (32, 32))
-                        targetCrop = exposure.equalize_adapthist(targetCrop, clip_limit=0.1)
+                        targetCrop = cv2.cvtColor(targetCrop, cv2.COLOR_BGR2RGB)
+                        targetCrop = cv2.resize(targetCrop, imageSize)
 
                         showImage("targetCrop [Post-process]", targetCrop)
-
                         targetCrop = targetCrop.astype("float") / 255.0
+
+                        # Add the "batch" dimension:
                         targetCrop = np.expand_dims(targetCrop, axis=0)
-                        preds = model.predict(targetCrop)
-                        print(preds[0][17])
-                        classProbability = preds.max()
-                        classNumber = preds.argmax(axis=1)[0]
-                        classLabel = labelnames[classNumber]
-                        print(" classNumber:", classNumber, " classProbability:", classProbability, " classLabel:", classLabel)
+
+                        print("[signnet - Test] Classifying image...")
+
+                        predictions = model.predict(targetCrop)
+                        print(predictions)
+
+                        # Get max probability:
+                        classIndex = predictions.argmax(axis=1)[0]
+                        classLabel = classDictionary[classIndex]
+                        classProbability = predictions[0][classIndex]
+                        print("ClassIndex:", classIndex, " classProbability:", classProbability, " classLabel:",
+                              classLabel)
 
                         if classProbability >= minClassProbability:
-                            classString = str(classNumber) + " " + classLabel
+                            classString = str(classIndex) + " " + classLabel + " (" + str(
+                                int(100 * classProbability)) + "%)"
                             print("Sending frame to tracker...")
 
                             # Goes to the tracker:
@@ -319,8 +331,6 @@ while videoDevice.isOpened():
             print("Updating Tracker...")
 
             # Update the tracker:
-            # detectionRoi = cv2.resize(detectionRoi, None, fx=2.0, fy=2.0,
-            #                           interpolation=cv2.INTER_NEAREST)
             detectionRoi = cv2.cvtColor(detectionRoi, cv2.COLOR_GRAY2BGR)
             status, trackedObj = tracker.updateTracker(detectionRoi)
 
@@ -329,13 +339,13 @@ while videoDevice.isOpened():
             if status:
                 # Draw rectangle:
                 (startX, startY, endX, endY) = trackedObj
-                color = (255, 255, 255)
+                color = (0, 255, 0)
                 detectionRoi = cv2.rectangle(detectionRoi, (int(startX), int(startY)),
                                              (int(startX + endX), int(startY + endY)), color, 2)
                 # Class text:
                 org = (int(startX), int(startY + endY))
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                color = (0, 255, 0)
+                color = (255, 0, 0)
                 cv2.putText(detectionRoi, classString, org, font, 0.4, color, 1, cv2.LINE_AA)
 
             else:
@@ -359,9 +369,6 @@ while videoDevice.isOpened():
         cv2.putText(frame, frameString, org, font, 1, color, 1, cv2.LINE_AA)
         showImage("Input Frame", frame, videoSpeed)
         # writeImage(outPath + "inputFrame", frame)
-
-        # if frameCounter == 250:
-        #    writeImage(outPath+"outputFrame-"+str(frameCounter), frame)
 
         # Break on "q"
         if cv2.waitKey(1) & 0xFF == ord("q"):
