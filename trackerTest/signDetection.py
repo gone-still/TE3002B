@@ -1,4 +1,4 @@
-# File        :   cascadeTest.py (Haar Cascade Test)
+# File        :   trackerTest.py (Tracker Test)
 # Version     :   0.9.0
 # Description :   Script that tests classification + tracking of
 #             :   traffic signal
