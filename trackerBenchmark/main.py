@@ -170,7 +170,7 @@ else:
                               (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3])), color, 2)
 
             else:
-                # Tracker los the object, re-run manual detection:
+                # Tracker lost the object, re-run manual detection:
                 print("Lost the object, running manual detection...")
                 startTracking = False
 
