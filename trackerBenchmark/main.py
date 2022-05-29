@@ -110,7 +110,6 @@ tracker = None
 trackerString = "csrt"
 
 # Tracker dictionary (available trackers):
-
 OPENCV_OBJECT_TRACKERS = {
     "csrt": cv2.legacy_TrackerCSRT,
     "kcf": cv2.legacy_TrackerKCF,
