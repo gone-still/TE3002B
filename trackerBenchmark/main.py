@@ -160,14 +160,12 @@ else:
         width = int(frame.shape[1] * scale)
         height = int(frame.shape[0] * scale)
         dsize = (width, height)
-
-        # resize image
         inputFrame = cv2.resize(frame, dsize, interpolation=cv2.INTER_AREA)
         # showImage("Resized", inputFrame)
 
         # Check tracker flag...
         if not (startTracking):
-            # Run manual detection if the tracker non-existant:
+            # Run manual detection if the tracking is non-existant:
             minArea = scale * 1000
             (validBox, bbox) = processFrame(inputFrame, minArea)
 
@@ -180,7 +178,7 @@ else:
                 startTracking = True
         else:
             # No need for manual detection, just update the tracker with a new
-            # frame and get a new bounding box for the tracked object:
+            # frame and get a nice new bounding box for the tracked object:
             status, bbox = tracker.update(inputFrame)
             # Status is a flag showing if the tracker lost the object:
             # print(status)
@@ -191,7 +189,7 @@ else:
                               (int(bbox[0] + bbox[2]), int(bbox[1] + bbox[3])), color, 2)
 
             else:
-                # Tracker los the object, re-run manual detection:
+                # Tracker lost the object, re-run manual detection:
                 print("Lost the object, running manual detection...")
                 startTracking = False
 
