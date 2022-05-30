@@ -1,7 +1,7 @@
 # File        :   main.py (Tracker Benchmark)
-# Version     :   1.0.0
+# Version     :   1.1.0
 # Description :   Tests different tracking algorithms. Tracks a blue object.
-# Date:       :   Feb 14, 2022
+# Date:       :   Feb 15, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -16,11 +16,39 @@ def showImage(imageName, inputImage):
     cv2.imshow(imageName, inputImage)
     cv2.waitKey()
 
+
 # Writes an image as png file:
 def writeImage(imagePath, inputImage):
     imagePath = imagePath + ".png"
     cv2.imwrite(imagePath, inputImage, [cv2.IMWRITE_PNG_COMPRESSION, 0])
     # print("Wrote Image: " + imagePath)
+
+
+# Carries out morphological filtering:
+def morhologicalChain(binaryImage):
+    # Set morph operation iterations:
+    opIterations = 1
+    # Set Structuring Element size:
+    structuringElementSize = (3, 3)
+    # Set Structuring element shape:
+    structuringElementShape = cv2.MORPH_RECT
+    # Get the Structuring Element:
+    structuringElement = cv2.getStructuringElement(structuringElementShape, structuringElementSize)
+
+    # Perform Morpho Chain:
+    morphedMask = cv2.morphologyEx(binaryImage, cv2.MORPH_DILATE, structuringElement, None, None, opIterations,
+                                   cv2.BORDER_REFLECT101)
+
+    opIterations = 2
+    morphedMask = cv2.morphologyEx(morphedMask, cv2.MORPH_ERODE, structuringElement, None, None, opIterations,
+                                   cv2.BORDER_REFLECT101)
+    # showImage("Morphed Mask 1", morphedMask)
+    morphedMask = cv2.morphologyEx(morphedMask, cv2.MORPH_DILATE, structuringElement, None, None, opIterations,
+                                   cv2.BORDER_REFLECT101)
+    # showImage("Morphed Mask 2", morphedMask)
+
+    return morphedMask
+
 
 # Processes the frame for manual object detection:
 def processFrame(inputFrame, minArea):
@@ -39,29 +67,11 @@ def processFrame(inputFrame, minArea):
     hsvMask = cv2.inRange(hsvFrame, lowerValues, upperValues)
     # cv2.imshow("hsvMask", hsvMask)
 
-    # Set morph operation iterations:
-    opIterations = 1
-    # Set Structuring Element size:
-    structuringElementSize = (3, 3)
-    # Set Structuring element shape:
-    structuringElementShape = cv2.MORPH_RECT
-    # Get the Structuring Element:
-    structuringElement = cv2.getStructuringElement(structuringElementShape, structuringElementSize)
-
-    # Perform Morpho Chain:
-    morphedMask = cv2.morphologyEx(hsvMask, cv2.MORPH_DILATE, structuringElement, None, None, opIterations,
-                                   cv2.BORDER_REFLECT101)
-
-    opIterations = 2
-    morphedMask = cv2.morphologyEx(morphedMask, cv2.MORPH_ERODE, structuringElement, None, None, opIterations,
-                                   cv2.BORDER_REFLECT101)
-    # showImage("Morphed Mask 1", morphedMask)
-    morphedMask = cv2.morphologyEx(morphedMask, cv2.MORPH_DILATE, structuringElement, None, None, opIterations,
-                                   cv2.BORDER_REFLECT101)
-    # showImage("Morphed Mask 2", morphedMask)
+    # Run morphological filtering:
+    filteredMask = morhologicalChain(hsvMask)
 
     # Get contours:
-    contours, _ = cv2.findContours(morphedMask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(filteredMask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     for i in range(len(contours)):
 
@@ -92,25 +102,24 @@ def processFrame(inputFrame, minArea):
     return (validBox, bbox)
 
 
-
-# Image path
+# Input path:
 path = os.path.join("D:/", "opencvImages", "trackerBenchmark")
+videoName = "testVideo01.mp4"
 
-# Write variables:
-frameCounter = 0
-videoSource = "Web Cam"
-writeFrames = False
+# Input flag.
+# True = reads video, False = reads web cam
+readVideo = True
 
 # Tracker variables:
 startTracking = False
 bbox = []
 tracker = None
 
-# Specify the desired tracker here:
+# Specify the desired tracker here,
+# select string from the tracker dictionary:
 trackerString = "csrt"
 
 # Tracker dictionary (available trackers):
-
 OPENCV_OBJECT_TRACKERS = {
     "csrt": cv2.legacy_TrackerCSRT,
     "kcf": cv2.legacy_TrackerKCF,
@@ -121,9 +130,13 @@ OPENCV_OBJECT_TRACKERS = {
     "mosse": cv2.legacy_TrackerMOSSE
 }
 
-# Open webcam:
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-# cap = cv2.VideoCapture(path + "testVideo.mp4")
+# Open Device:
+if readVideo:
+    videoPath = os.path.join(path, videoName)
+    print("Reading video file: " + videoPath)
+    cap = cv2.VideoCapture(videoPath)
+else:
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
 # Check if device is opened:
 if not (cap.isOpened()):
@@ -136,6 +149,11 @@ else:
 
         # Capture frame-by-frame
         ret, frame = cap.read()
+
+        # Check if we have a valid frame:
+        if not ret:
+            print("Reached end of video file.")
+            break
 
         # Resize frame:
         scale = 0.5
@@ -151,7 +169,6 @@ else:
         if not (startTracking):
             # Run manual detection if the tracker non-existant:
             minArea = scale * 1000
-            print(minArea)
             (validBox, bbox) = processFrame(inputFrame, minArea)
 
             # Check if we have a good manual detection:
@@ -166,7 +183,7 @@ else:
             # frame and get a new bounding box for the tracked object:
             status, bbox = tracker.update(inputFrame)
             # Status is a flag showing if the tracker lost the object:
-            print(status)
+            # print(status)
             if status:
                 # Tracker is good, draw bounding rectangle:
                 color = (0, 255, 0)
