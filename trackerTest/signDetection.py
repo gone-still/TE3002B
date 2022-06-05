@@ -1,8 +1,8 @@
 # File        :   signDetection.py (Traffic signal detection, classification and tracking example)
-# Version     :   0.10.2
+# Version     :   0.10.3
 # Description :   Script that tests classification + tracking of
 #             :   traffic signal
-# Date:       :   June 04, 2022
+# Date:       :   June 05, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -220,8 +220,11 @@ shrinkRatio = 0.05
 ransacThreshold = 0.9
 trackerId = 1
 
-# Tracking margin (x,y,w,h):
-trackerBorders = (2, 2, 2, 2)
+# Tracking margin in pixels (x,y)
+# This control how much of the signal surrounding area
+# the tracker "sees". Useful for increasing tracking
+# Keypoints (more stable tracking)
+trackerBorders = (3, 3)
 
 # Running cascade at first frame:
 runCascade = True
@@ -244,12 +247,12 @@ model = load_model(modelsPath + "signnet.model")
 classString = ""
 
 # Set the video device:
-videoDevice = cv2.VideoCapture(filePath + "trafficSign05.mp4")
+videoDevice = cv2.VideoCapture(filePath + "trafficSign07.mp4")
 
 trackerCounter = 0
 
 # Load cascade:
-signCascade = cv2.CascadeClassifier(modelsPath + "cascades//" "signalCascade-04.xml")
+signCascade = cv2.CascadeClassifier(modelsPath + "cascades//" "signalCascade-05.xml")
 
 # Threshold parameters:
 minCascadeArea = 900
@@ -427,10 +430,13 @@ while videoDevice.isOpened():
                                     print((xTrack, yTrack, wTrack, hTrack))
 
                                     # Draw the trackin area:
-                                    color = (255, 0, 255)
                                     trackerRectInput = detectionRoiColor.copy()
-                                    detectionRoi = cv2.rectangle(trackerRectInput, (int(xTrack), int(yTrack)),
-                                                                 (int(xTrack + wTrack), int(yTrack + hTrack)), color, 2)
+                                    # Cascade estimation:
+                                    cv2.rectangle(trackerRectInput, (int(x), int(y)),
+                                                  (int(x + w), int(y + h)), (255, 255, 0), 1)
+                                    # Margin added
+                                    cv2.rectangle(trackerRectInput, (int(xTrack), int(yTrack)),
+                                                  (int(xTrack + wTrack), int(yTrack + hTrack)), (255, 0, 255), 1)
                                     showImage("trackerRectInput [Tracker Rect]", trackerRectInput)
 
                                     # showImage("detectionRoi [Tracker Input]", detectionRoi)
@@ -460,8 +466,8 @@ while videoDevice.isOpened():
                 # Draw rectangle:
                 (startX, startY, endX, endY) = trackedObj
                 color = (0, 255, 0)
-                detectionRoi = cv2.rectangle(detectionRoi, (int(startX), int(startY)),
-                                             (int(startX + endX), int(startY + endY)), color, 2)
+                cv2.rectangle(detectionRoi, (int(startX), int(startY)),
+                              (int(startX + endX), int(startY + endY)), color, 2)
                 # Class text:
                 org = (int(startX), int(startY + endY))
                 font = cv2.FONT_HERSHEY_SIMPLEX
