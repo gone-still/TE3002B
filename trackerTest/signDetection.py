@@ -1,8 +1,8 @@
-# File        :   trackerTest.py (Tracker Test)
-# Version     :   0.9.0
+# File        :   signDetection.py (Traffic signal detection, classification and tracking example)
+# Version     :   0.10.2
 # Description :   Script that tests classification + tracking of
 #             :   traffic signal
-# Date:       :   May 26, 2022
+# Date:       :   June 04, 2022
 # Author      :   Ricardo Acevedo-Avila (racevedoaa@gmail.com)
 # License     :   MIT
 
@@ -24,6 +24,123 @@ def writeImage(imagePath, inputImage):
     imagePath = imagePath + ".png"
     cv2.imwrite(imagePath, inputImage, [cv2.IMWRITE_PNG_COMPRESSION, 0])
     print("Wrote Image: " + imagePath)
+
+
+# Clamps an integer to a valid range:
+def clamp(val, minval, maxval):
+    if val < minval: return minval
+    if val > maxval: return maxval
+    return val
+
+
+# Obtains a blob bounding rect via grab-cut
+def getGrabCutMask(inputRect, inputImage):
+    # Unpack the rect tuple:
+    (sx, sy, sw, sh) = inputRect
+
+    # Default out values:
+    goodBlob = False
+    blobRect = ()
+    # goodMask = np.zeros((sh, sw, 1), dtype="uint8")
+
+    # Define object area for grab-cut (the "window"),
+    # Window centroid:
+    cxWindow = int(0.5 * sw)
+    cyWindow = int(0.5 * sh)
+
+    # Loop thru all window scales:
+    for s in range(1, 4):
+        # Get current scale:
+        s = 2 * s
+        print("scale: " + str(s))
+
+        # Define window top left corner:
+        currentWindowScale = 1 / s
+        xWindow = int(currentWindowScale * cxWindow)
+        yWindow = int(currentWindowScale * cyWindow)
+
+        # Define window width and height:
+        wWindow = int(2 * (cxWindow - xWindow))
+        hWindow = int(2 * (cyWindow - yWindow))
+
+        # Define the tuple:
+        grabCutRect = (xWindow, yWindow, wWindow, hWindow)
+        print(grabCutRect)
+
+        # Show the window:
+        grabCutArea = inputImage.copy()
+
+        # Show the grab cut area:
+        color = (0, 0, 255)
+        cv2.rectangle(grabCutArea, (xWindow, yWindow), (xWindow + wWindow, yWindow + hWindow),
+                      color, 2)
+
+        # Show centroid:
+        color = (255, 0, 0)
+        cv2.line(grabCutArea, (cxWindow, cyWindow), (cxWindow, cyWindow), color, 2)
+
+        showImage("grabCutArea: " + str(s), grabCutArea)
+        # writeImage(outPath + "grabCutArea", grabCutArea)
+
+        # Tune the detection using grab n cut:
+        # The mask is a uint8 type, same dimensions as
+        # original input:
+        mask = np.zeros(inputImage.shape[:2], np.uint8)
+
+        # Grab n Cut needs two empty matrices of
+        # Float type (64 bits) and size 1 (rows) x 65 (columns):
+        bgModel = np.zeros((1, 65), np.float64)
+        fgModel = np.zeros((1, 65), np.float64)
+
+        # Run Grab n Cut on INIT_WITH_RECT mode:
+        grabCutIterations = 2
+        mask, bgModel, fgModel = cv2.grabCut(inputImage, mask, grabCutRect, bgModel, fgModel,
+                                             grabCutIterations, mode=cv2.GC_INIT_WITH_RECT)
+
+        # Set all definite background (0) and probable background pixels (2)
+        # to 0 while definite foreground and probable foreground pixels are
+        # set to 1
+        outputMask = np.where((mask == cv2.GC_BGD) | (mask == cv2.GC_PR_BGD), 0, 1)
+
+        # Scale the mask from the range [0, 1] to [0, 255]
+        outputMask = (outputMask * 255).astype("uint8")
+
+        showImage("GrabCut Mask", outputMask)
+        # writeImage(outPath + "grabCutMask", outputMask)
+
+        # Get blob area:
+        currentBlobArea = cv2.countNonZero(outputMask)
+        print("currentBlobArea: " + str(currentBlobArea))
+
+        # Check if we have a good blob,
+        # Check area:
+        if currentBlobArea > minBlobArea:
+
+            # Get blob rect:
+            (bx, by, bw, bh) = cv2.boundingRect(outputMask)
+            blobAspectRatio = bh / bw
+            print("blobAspectRatio: " + str(blobAspectRatio))
+
+            # Get aspect ratio difference:
+            aspectRatioDifference = abs(1.0 - blobAspectRatio)
+            epsilon = 0.3
+
+            # Check aspect ratio:
+            if aspectRatioDifference <= epsilon:
+                print("Got good blob. Scale: " + str(s))
+                goodBlob = True
+                # # Give some slack:
+                # bx = clamp(bx - trackerBorders[0], 0, bw)
+                # by = clamp(by - trackerBorders[1], 0, bh)
+                # bw = clamp(bw + 2 * trackerBorders[2], 0, bw)
+                # bh = clamp(bh + 2 * trackerBorders[3], 0, bh)
+                blobRect = (bx, by, bw, bh)
+                # goodMask = outputMask
+
+    # Set out values:
+    outTuple = (goodBlob, blobRect)
+
+    return outTuple
 
 
 # Script variables:
@@ -70,7 +187,7 @@ roiWidth = int(frameWidth * roiScale)
 cascadeRoi = (int(roiX), int(roiY * roiScale), int(roiWidth), int(roiHeight))
 
 # Left/Right starting horizontal coordinates:
-sideWidthFactor = 0.35
+sideWidthFactor = 0.4
 leftSide = int(sideWidthFactor * roiWidth)
 rightSide = int(roiWidth - sideWidthFactor * roiWidth)
 
@@ -99,10 +216,14 @@ fastThreshold = 5
 nRows = 3
 nCols = 3
 kltWindowSize = 10
-shrinkRatio = 0.1
+shrinkRatio = 0.05
 ransacThreshold = 0.9
 trackerId = 1
 
+# Tracking margin (x,y,w,h):
+trackerBorders = (2, 2, 2, 2)
+
+# Running cascade at first frame:
 runCascade = True
 
 # Set tracker parameters:
@@ -128,13 +249,19 @@ videoDevice = cv2.VideoCapture(filePath + "trafficSign05.mp4")
 trackerCounter = 0
 
 # Load cascade:
-signCascade = cv2.CascadeClassifier(modelsPath + "triangular_lbp_new.xml")
+signCascade = cv2.CascadeClassifier(modelsPath + "cascades//" "signalCascade-04.xml")
+
+# Threshold parameters:
+minCascadeArea = 900
+minCascadeAspectRatio = 0.9
+minBlobArea = 10
 
 # Check if device is opened:
 while videoDevice.isOpened():
     # Get video device frame:
     success, frame = videoDevice.read()
 
+    # We have a nice frame to process:
     if success:
 
         # Extract frame size:
@@ -165,167 +292,158 @@ while videoDevice.isOpened():
         detectionRoi = cv2.cvtColor(detectionRoi, cv2.COLOR_BGR2GRAY)
         showImage("detectionRoi", detectionRoi)
 
+        # Let's see if we must run cascade detection:
         if runCascade:
 
             # Run Haar Cascade
-            boundingBoxes = signCascade.detectMultiScale(detectionRoi,
-                                                         scaleFactor=1.015,
-                                                         minNeighbors=15,
+            # Tune the parameters to tune detection;s quality:
+            boundingBoxes = signCascade.detectMultiScale(detectionRoi, scaleFactor=1.015, minNeighbors=4,
                                                          minSize=(3, 3))
 
             totalBoxes = len(boundingBoxes)
             print("Objects detected via Cascade: " + str(totalBoxes))
 
+            # We need at least one detection:
             if totalBoxes > 0:
 
+                # Got detection,
                 # Convert gray ROI to BGR:
                 detectionRoi = cv2.cvtColor(detectionRoi, cv2.COLOR_GRAY2BGR)
 
+                # Loop through all mah bounding boxes:
                 for (x, y, w, h) in boundingBoxes:
 
-                    # compute box area:
+                    # Compute box area:
                     cascadeArea = w * h
                     print("Cascade Area: " + str(cascadeArea))
 
-                    # compute box centroid:
-                    cx = int(x + 0.5 * w)
-                    cy = int(y + 0.5 * h)
+                    # Check minimum area:
+                    if cascadeArea >= minCascadeArea:
+                        print("Got box with good area.")
 
-                    # Default color:
-                    color = (0, 0, 0)
+                        # Compute box centroid:
+                        cx = int(x + 0.5 * w)
+                        cy = int(y + 0.5 * h)
 
-                    # Get detection mask "zone valid" pixel:
-                    validPixel = int(detectionMask[cy, cx])
-                    # print("validPixel: "+str(validPixel))
+                        # Default color:
+                        color = (0, 0, 0)
 
-                    # Check if we have a valid pixel inside the
-                    # "processing" zone:
-                    if validPixel == 255:
-                        # green is right:
-                        color = (0, 255, 0)
-                        print("Got valid Haar Cascade Box")
-                    else:
-                        # red is not:
-                        color = (0, 0, 255)
-                        print("Got invalid Haar Cascade Box")
+                        # Get detection mask "zone valid" pixel:
+                        validPixel = int(detectionMask[cy, cx])
 
-                    # Draw the bounding box:
-                    cv2.rectangle(detectionRoi, (x, y), (x + w, y + h), color, 2)
-                    showImage("Haar Boxes", detectionRoi)
-
-                    if validPixel == 255:
-
-                        # Crop via cascade:
-                        targetCrop = detectionRoiColor[y:y + h, x:x + w]
-                        showImage("targetCrop [Cascade]", targetCrop)
-
-                        # Define the "search window" for
-                        # grab-cut:
-                        xWindow = int(w / 4)
-                        yWindow = int(h / 4)
-                        wWindow = int(0.5 * w)
-                        hWindow = int(0.5 * h)
-
-                        # Define the tuple:
-                        maskRect = (xWindow, yWindow, wWindow, hWindow)
-                        grabCutArea = targetCrop.copy()
-
-                        # Show the grab cut area:
-                        color = (0, 0, 255)
-                        cv2.rectangle(grabCutArea, (xWindow, yWindow), (xWindow + wWindow, yWindow + hWindow),
-                                      color, 2)
-                        showImage("grabCutArea", grabCutArea)
-                        # writeImage(outPath + "grabCutArea", grabCutArea)
-
-                        # Apply grab-cut:
-                        # Tune the detection using grab n cut:
-                        # The mask is a uint8 type, same dimensions as
-                        # original input:
-                        mask = np.zeros(targetCrop.shape[:2], np.uint8)
-
-                        # Grab n Cut needs two empty matrices of
-                        # Float type (64 bits) and size 1 (rows) x 65 (columns):
-                        bgModel = np.zeros((1, 65), np.float64)
-                        fgModel = np.zeros((1, 65), np.float64)
-
-                        (maskHeight, maskWidth) = targetCrop.shape[:2]
-
-                        # Run Grab n Cut on INIT_WITH_RECT mode:
-                        grabCutIterations = 2
-                        mask, bgModel, fgModel = cv2.grabCut(targetCrop, mask, maskRect, bgModel, fgModel,
-                                                             grabCutIterations, mode=cv2.GC_INIT_WITH_RECT)
-
-                        # Set all definite background (0) and probable background pixels (2)
-                        # to 0 while definite foreground and probable foreground pixels are
-                        # set to 1
-                        outputMask = np.where((mask == cv2.GC_BGD) | (mask == cv2.GC_PR_BGD), 0, 1)
-
-                        # Scale the mask from the range [0, 1] to [0, 255]
-                        outputMask = (outputMask * 255).astype("uint8")
-
-                        showImage("GrabCut Mask", outputMask)
-                        # writeImage(outPath + "grabCutMask", outputMask)
-
-                        # Compute blob area:
-                        blobArea = cv2.countNonZero(outputMask)
-                        print("blobArea: " + str(blobArea))
-
-                        # Get the bounding rectangle:
-                        boundRect = cv2.boundingRect(outputMask)
-
-                        xGrabCut = boundRect[0]
-                        yGrabCut = boundRect[1]
-                        wGrabCut = boundRect[2]
-                        hGrabCut = boundRect[3]
-
-                        # Refine crop area:
-                        targetCrop = targetCrop[yGrabCut:yGrabCut + hGrabCut, xGrabCut:xGrabCut + wGrabCut]
-                        showImage("targetCrop [Refined]", targetCrop)
-                        writeImage(outPath + "targetCropRefined", targetCrop)
-
-                        print("Sending crop to CNN...")
-                        showImage("targetCrop [Pre-process]", targetCrop)
-
-                        targetCrop = cv2.cvtColor(targetCrop, cv2.COLOR_BGR2RGB)
-                        targetCrop = cv2.resize(targetCrop, imageSize)
-
-                        showImage("targetCrop [Post-process]", targetCrop)
-                        targetCrop = targetCrop.astype("float") / 255.0
-
-                        # Add the "batch" dimension:
-                        targetCrop = np.expand_dims(targetCrop, axis=0)
-
-                        print("[signnet - Test] Classifying image...")
-
-                        predictions = model.predict(targetCrop)
-                        print(predictions)
-
-                        # Get max probability:
-                        classIndex = predictions.argmax(axis=1)[0]
-                        classLabel = classDictionary[classIndex]
-                        classProbability = predictions[0][classIndex]
-                        print("ClassIndex:", classIndex, " classProbability:", classProbability, " classLabel:",
-                              classLabel)
-
-                        if classProbability >= minClassProbability:
-                            classString = str(classIndex) + " " + classLabel + " (" + str(
-                                int(100 * classProbability)) + "%)"
-                            print("Sending frame to tracker...")
-
-                            # Goes to the tracker:
-                            # Add the initial cropped amount:
-                            x = x + xGrabCut
-                            y = y + yGrabCut
-                            h = hGrabCut
-                            w = wGrabCut
-
-                            # showImage("detectionRoi [Tracker Input]", detectionRoi)
-                            # writeImage(outPath + "trackerInput", detectionRoi)
-
-                            tracker.initTracker(detectionRoi, (x, y, w, h))
-                            runCascade = False
+                        # Check if we have a valid pixel inside the
+                        # "processing" zone:
+                        if validPixel == 255:
+                            # green is right:
+                            color = (0, 255, 0)
+                            print("Got valid Haar Cascade Box")
                         else:
-                            print("Min Class Probability not met. Running CNN on next frame...")
+                            # red is not:
+                            color = (0, 0, 255)
+                            print("Got invalid Haar Cascade Box")
+
+                        # Draw the bounding box:
+                        cv2.rectangle(detectionRoi, (x, y), (x + w, y + h), color, 2)
+                        showImage("Haar Boxes", detectionRoi)
+
+                        # So far, so good. Continue processing:
+                        if validPixel == 255:
+
+                            # Crop via cascade:
+                            targetCrop = detectionRoiColor[y:y + h, x:x + w]
+                            showImage("targetCrop [Cascade]", targetCrop)
+
+                            # Define the "search window" for
+                            # grab-cut:
+                            maskRect = (x, y, w, h)
+
+                            # Get refined rectangle via grab-cut:
+                            (goodBlob, boundRect) = getGrabCutMask(maskRect, targetCrop)
+
+                            # Check out if grab-cut got a valid blob:
+                            if goodBlob:
+
+                                print("Grab-cut found valid blob.")
+
+                                # Got good blob, compute its bounding rectangle:
+                                # boundRect = cv2.boundingRect(outputMask)
+
+                                # Set new rect dimensions:
+                                xGrabCut = boundRect[0]
+                                yGrabCut = boundRect[1]
+                                wGrabCut = boundRect[2]
+                                hGrabCut = boundRect[3]
+
+                                # Refine crop area:
+                                targetCrop = targetCrop[yGrabCut:yGrabCut + hGrabCut, xGrabCut:xGrabCut + wGrabCut]
+
+                                showImage("targetCrop [Refined]", targetCrop)
+                                # writeImage(outPath + "targetCropRefined", targetCrop)
+
+                                print("Sending crop to CNN...")
+                                showImage("targetCrop [Pre-process]", targetCrop)
+
+                                # Resize to CNN dimensions:
+                                targetCrop = cv2.cvtColor(targetCrop, cv2.COLOR_BGR2RGB)
+                                targetCrop = cv2.resize(targetCrop, imageSize)
+                                showImage("targetCrop [Post-process]", targetCrop)
+
+                                # Scale between 0.0 and 1.0
+                                targetCrop = targetCrop.astype("float") / 255.0
+
+                                # Add the "batch" dimension:
+                                targetCrop = np.expand_dims(targetCrop, axis=0)
+
+                                print("[signnet - Test] Classifying image...")
+
+                                # Get the goddamn predictions:
+                                predictions = model.predict(targetCrop)
+                                print(predictions)
+
+                                # Get max probability and its class:
+                                classIndex = predictions.argmax(axis=1)[0]
+                                classLabel = classDictionary[classIndex]
+                                classProbability = predictions[0][classIndex]
+                                print("ClassIndex:", classIndex, " classProbability:", classProbability, " classLabel:",
+                                      classLabel)
+
+                                # Yeah, discard bullshit classifications and process
+                                # only if we have a good prediction:
+                                if classProbability >= minClassProbability:
+                                    classString = str(classIndex) + " " + classLabel + " (" + str(
+                                        int(100 * classProbability)) + "%)"
+                                    print("Sending frame to tracker...")
+
+                                    # Goes to the tracker:
+                                    # Add the initial cropped amount and add some margins:
+                                    print((x, y, w, h))
+                                    (cropHeight, cropWidth) = detectionRoi.shape[:2]
+                                    xTrack = clamp(x + (xGrabCut - trackerBorders[0]), 0, cropWidth)
+                                    yTrack = clamp(y + (yGrabCut - trackerBorders[1]), 0, cropHeight)
+                                    wTrack = clamp(wGrabCut + 2 * trackerBorders[0], 0, cropWidth)
+                                    hTrack = clamp(hGrabCut + 2 * trackerBorders[1], 0, cropHeight)
+
+                                    # My bounding rectangle, lemme show it to you:
+                                    print((xTrack, yTrack, wTrack, hTrack))
+
+                                    # Draw the trackin area:
+                                    color = (255, 0, 255)
+                                    trackerRectInput = detectionRoiColor.copy()
+                                    detectionRoi = cv2.rectangle(trackerRectInput, (int(xTrack), int(yTrack)),
+                                                                 (int(xTrack + wTrack), int(yTrack + hTrack)), color, 2)
+                                    showImage("trackerRectInput [Tracker Rect]", trackerRectInput)
+
+                                    # showImage("detectionRoi [Tracker Input]", detectionRoi)
+                                    # writeImage(outPath + "trackerInput", detectionRoi)
+
+                                    # Fucking initialize the tracker:
+                                    tracker.initTracker(detectionRoi, (xTrack, yTrack, wTrack, hTrack))
+                                    # Cascade is no longer needed:
+                                    runCascade = False
+                                else:
+                                    # I got bullshit, courtesy of the CNN:
+                                    print("Min Class Probability not met. Running CNN on next frame...")
+
         else:
 
             print("Updating Tracker...")
@@ -336,6 +454,8 @@ while videoDevice.isOpened():
 
             print(status)
 
+            # If the tracker is good, let's continue
+            # processing:
             if status:
                 # Draw rectangle:
                 (startX, startY, endX, endY) = trackedObj
@@ -349,8 +469,11 @@ while videoDevice.isOpened():
                 cv2.putText(detectionRoi, classString, org, font, 0.4, color, 1, cv2.LINE_AA)
 
             else:
+                # Tracker failed (probably lost or not enough keypoints),
+                # Run manual detection + classification on next frames:
                 runCascade = True
 
+        # Show the final output:
         showImage("resizedImage [Objects]", detectionRoi, 0)
 
         # writeImage(outPath + "detectionRoi-" + str(trackerCounter), detectionRoi)
