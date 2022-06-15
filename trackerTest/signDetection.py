@@ -247,7 +247,7 @@ model = load_model(modelsPath + "signnet.model")
 classString = ""
 
 # Set the video device:
-videoDevice = cv2.VideoCapture(filePath + "trafficSign07.mp4")
+videoDevice = cv2.VideoCapture(filePath + "trafficSign05.mp4")
 
 trackerCounter = 0
 
